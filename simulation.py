@@ -106,7 +106,7 @@ def apply_flow_walls(populations: FloatArray, lid_velocity: float) -> None:
 
 def set_wall_temperature(wall: FloatArray, incoming: IndexArray, temperature: float) -> None:
     wall[incoming] = 2 * WEIGHTS[incoming, None] * temperature - wall[OPPOSITE[incoming]]
-    wall[REST] = temperature
+    wall[REST] = WEIGHTS[REST] * temperature
 
 
 def apply_heat_walls(populations: FloatArray, lid_temperature: float, side_wall_temperature: float) -> None:
