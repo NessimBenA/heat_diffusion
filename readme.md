@@ -40,7 +40,7 @@ The script prints the state every 2,000 steps and writes `cavity.gif` (101 frame
 ## What the run gives
 
 - It stays stable for the 20,000 steps: no NaN, the density ends between 4.76 and 6.07 (it starts at 5), and the lid row moves at 0.200.
-- The total mass drifts down by 0.79% over the run, at a steady rate, because the moving-lid boundary does not conserve mass exactly.
+- The total mass drifts down by 0.79% over the run, at a steady rate. Collision and streaming conserve mass, so the loss comes from the wall conditions, which do not conserve it exactly.
 - The flow forms one main vortex. In the last frame the speed changes by at most 1.0e-4 over 200 steps, which is 0.05% of the lid speed.
 - The heat is still spreading at the end: the mean temperature inside the cavity is 0.31 at step 10,000 and 0.38 at step 20,000.
 - Away from the two top corners, where the hot lid meets the cold walls, the temperature stays between 0 and 1 to within 0.001. Within 14 nodes of those corners it reaches -0.011 and 1.225.
