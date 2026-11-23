@@ -1,220 +1,208 @@
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final
+
 import numpy as np
-import matplotlib.pyplot as plt
-import math
+import numpy.typing as npt
+from matplotlib.animation import PillowWriter
+from matplotlib.figure import Figure
 
-# Parameters
-m = 100 # m : distance where it is diffused
-time_step = 1 # ro
-space_step = 1 # delta
-viscosite=0.02
-prandlt=0.71
-coeffision=viscosite/prandlt
-relaxation_time = 1/(3*viscosite + 0.5) #wm 
-relaxation_time2 = 1/(3*coeffision + 0.5) #wd
-cs=3 #1/cs^2 de nos calculs
-constantev0 = 0.2
-c=1
+FloatArray = npt.NDArray[np.float64]
+IndexArray = npt.NDArray[np.intp]
 
-U0 = 1 # U_0
-iterations = 20000 # number of time step simulated
-rho=time_step/space_step
-
-# Init
-p = 5*np.ones((m+1,m+1)) # p(x,t)
-u0 = p*(4/9) #f0
-u1 = p*(1/9) #f1
-u2 = p*(1/9)
-u3 = p*(1/9)
-u4 = p*(1/9)
-u5 = p*(1/36)
-u6 = p*(1/36)
-u7 = p*(1/36)
-u8 = p*(1/36)
-
-x = np.zeros((m+1,m+1)) # X(x,t)
-w0=(4/9)*x #g1
-w1=(1/9)*x #g2
-w2=(1/9)*x
-w3=(1/9)*x
-w4=(1/9)*x
-w5=(1/36)*x
-w6=(1/36)*x
-w7=(1/36)*x
-w8=(1/36)*x
+LATTICE_VELOCITIES: Final = ((0, 0), (1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1))
+VELOCITY_X: Final = np.array([step_x for step_x, _ in LATTICE_VELOCITIES], dtype=np.float64)
+VELOCITY_Y: Final = np.array([step_y for _, step_y in LATTICE_VELOCITIES], dtype=np.float64)
+WEIGHTS: Final = np.array([4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36], dtype=np.float64)
+OPPOSITE: Final = np.array([LATTICE_VELOCITIES.index((-step_x, -step_y)) for step_x, step_y in LATTICE_VELOCITIES])
+REST: Final = 0
+MOVING_EAST: Final = np.flatnonzero(VELOCITY_X > 0)
+MOVING_WEST: Final = np.flatnonzero(VELOCITY_X < 0)
+MOVING_UP: Final = np.flatnonzero(VELOCITY_Y > 0)
+MOVING_DOWN: Final = np.flatnonzero(VELOCITY_Y < 0)
+MOVING_ALONG_LID: Final = np.flatnonzero(VELOCITY_Y == 0)
 
 
-v1 = np.zeros((m+1,m+1)) #Vitesse vx
-v1[0,:]=constantev0
-v2 = np.zeros((m+1,m+1)) #vitesse vy
-tk=([4/9,1/9,1/9,1/9,1/9,1/36,1/36,1/36,1/36])
-c0=[0,0]
-c1=[1,0]
-c2=[0,1]
-c3=[-1,0]
-c4=[0,-1]
-c5=[1,1]
-c6=[-1,1]
-c7=[-1,-1]
-c8=[1,-1]
+@dataclass(frozen=True)
+class Parameters:
+    cavity_size: int = 100
+    lid_velocity: float = 0.2
+    viscosity: float = 0.02
+    prandtl_number: float = 0.71
+    lid_temperature: float = 1.0
+    side_wall_temperature: float = 0.0
+    initial_density: float = 5.0
+    steps: int = 20000
+    snapshot_interval: int = 200
 
-def functioncalculf(cx): #fonction pour calculer feq
-    if cx==0:
-        return tk[cx]* p * (1 + cs * (c0[0] * v1 + c0[1] * v2) + (1/2)*((cs**2) * (c0[0] * v1 + c0[1] * v2)**2) - (1/2 * cs * (v1**2 + v2**2)))
-    if cx==1:
-        return tk[cx]* p * (1 + cs * (c1[0] * v1 + c1[1] * v2) + (1/2)*((cs**2) * (c1[0] * v1 + c1[1] * v2)**2) - (1/2 * cs * (v1**2 + v2**2)))
-    if cx==2:
-        return tk[cx]* p * (1 + cs * (c2[0] * v1 + c2[1] * v2) + (1/2)*((cs**2) * (c2[0] * v1 + c2[1] * v2)**2) - (1/2 * cs * (v1**2 + v2**2)))
-    if cx==3:
-        return tk[cx]* p * (1 + cs * (c3[0] * v1 + c3[1] * v2) + (1/2)*((cs**2) * (c3[0] * v1 + c3[1] * v2)**2) - (1/2 * cs * (v1**2 + v2**2)))
-    if cx==4:
-        return tk[cx]* p * (1 + cs * (c4[0] * v1 + c4[1] * v2) + (1/2)*((cs**2) * (c4[0] * v1 + c4[1] * v2)**2) - (1/2 * cs * (v1**2 + v2**2)))
-    if cx==5:
-        return tk[cx]* p * (1 + cs * (c5[0] * v1 + c5[1] * v2) + (1/2)*((cs**2) * (c5[0] * v1 + c5[1] * v2)**2) - (1/2 * cs * (v1**2 + v2**2)))
-    if cx==6:
-        return tk[cx]* p * (1 + cs * (c6[0] * v1 + c6[1] * v2) + (1/2)*((cs**2) * (c6[0] * v1 + c6[1] * v2)**2) - (1/2 * cs * (v1**2 + v2**2)))
-    if cx==7:
-        return tk[cx]* p * (1 + cs * (c7[0] * v1 + c7[1] * v2) + (1/2)*((cs**2) * (c7[0] * v1 + c7[1] * v2)**2) - (1/2 * cs * (v1**2 + v2**2)))
-    if cx==8:
-        return tk[cx]* p * (1 + cs * (c8[0] * v1 + c8[1] * v2) + (1/2)*((cs**2) * (c8[0] * v1 + c8[1] * v2)**2) - (1/2 * cs * (v1**2 + v2**2)))
+    @property
+    def thermal_diffusivity(self) -> float:
+        return self.viscosity / self.prandtl_number
+
+    @property
+    def flow_relaxation_rate(self) -> float:
+        return 1 / (3 * self.viscosity + 0.5)
+
+    @property
+    def heat_relaxation_rate(self) -> float:
+        return 1 / (3 * self.thermal_diffusivity + 0.5)
+
+    @property
+    def reynolds_number(self) -> float:
+        return self.lid_velocity * self.cavity_size / self.viscosity
+
+    @property
+    def peclet_number(self) -> float:
+        return self.lid_velocity * self.cavity_size / self.thermal_diffusivity
 
 
+@dataclass(frozen=True)
+class Snapshot:
+    step: int
+    speed: FloatArray
+    temperature: FloatArray
 
 
-# Process temperature diffusion simulation
-for i in range(iterations+1):
-    
-    u0eq = functioncalculf(0)
-    u1eq = functioncalculf(1)
-    u2eq = functioncalculf(2)
-    u3eq = functioncalculf(3)
-    u4eq = functioncalculf(4)
-    u5eq = functioncalculf(5)
-    u6eq = functioncalculf(6)
-    u7eq = functioncalculf(7)
-    u8eq = functioncalculf(8)
-    
-    # Collision
-    u0 = u0*(1-relaxation_time) + relaxation_time*u0eq
-    u1 = u1*(1-relaxation_time) + relaxation_time*u1eq
-    u2 = u2*(1-relaxation_time) + relaxation_time*u2eq
-    u3 = u3*(1-relaxation_time) + relaxation_time*u3eq
-    u4 = u4*(1-relaxation_time) + relaxation_time*u4eq
-    u5 = u5*(1-relaxation_time) + relaxation_time*u5eq
-    u6 = u6*(1-relaxation_time) + relaxation_time*u6eq
-    u7 = u7*(1-relaxation_time) + relaxation_time*u7eq
-    u8 = u8*(1-relaxation_time) + relaxation_time*u8eq
-    
-    # Streaming
-    u1[:,1:] = u1[:,:-1]
-    u2[:-1,:] = u2[1:,:]
-    u3[:,:-1] = u3[:,1:]
-    u4[1:,:] = u4[:-1,:]
-    u5[:-1,1:] = u5[1:,:-1]
-    u6[:-1,:-1] = u6[1:,1:]
-    u7[1:,:-1] = u7[:-1,1:]
-    u8[1:,1:] = u8[:-1,:-1]
-    
-   
-    # Border conditions
-    u1[:,0] = u3[:,0]
-    u5[:,0] = u7[:,0]
-    u8[:,0] = u6[:,0]
+def projected_velocity(velocity_x: FloatArray, velocity_y: FloatArray) -> FloatArray:
+    return VELOCITY_X[:, None, None] * velocity_x + VELOCITY_Y[:, None, None] * velocity_y
 
 
-    u3[:,m] = u1[:,m]
-    u7[:,m] = u5[:,m]
-    u6[:,m] = u8[:,m]
+def flow_equilibrium(density: FloatArray, velocity_x: FloatArray, velocity_y: FloatArray) -> FloatArray:
+    projected = projected_velocity(velocity_x, velocity_y)
+    speed_squared = velocity_x**2 + velocity_y**2
+    return WEIGHTS[:, None, None] * density * (1 + 3 * projected + 4.5 * projected**2 - 1.5 * speed_squared)
 
 
-    u2[m,:] = u4[m,:]
-    u5[m,:] = u7[m,:]
-    u6[m,:] = u8[m,:]
+def heat_equilibrium(temperature: FloatArray, velocity_x: FloatArray, velocity_y: FloatArray) -> FloatArray:
+    return WEIGHTS[:, None, None] * temperature * (1 + 3 * projected_velocity(velocity_x, velocity_y))
 
 
-    p[0,:] = u0[0,:] + u1[0,:] + u3[0,:] + 2*(u2[0,:] + u6[0,:] + u5[0,:])
-    u4[0,:] = u2[0,:]
-    u7[0,:] = u5[0,:] - (p[0,:]*constantev0)/6
-    u8[0,:] = u6[0,:] + (p[0,:]*constantev0)/6
-
-    p = u0 + u1 + u2 + u3 + u4 + u5 + u6 + u7 + u8 
-
-  
-    v1=(u1*c1[0] + u2*c2[0] + u3*c3[0] + u4*c4[0] + u5*c5[0] + u6*c6[0] + u7*c7[0] + u8*c8[0])/p
-    v2=(u1*c1[1] + u2*c2[1] + u3*c3[1] + u4*c4[1] + u5*c5[1] + u6*c6[1] + u7*c7[1] + u8*c8[1])/p
+def shifted_slices(shift: int) -> tuple[slice, slice]:
+    if shift > 0:
+        return slice(shift, None), slice(None, -shift)
+    if shift < 0:
+        return slice(None, shift), slice(-shift, None)
+    return slice(None), slice(None)
 
 
-    
-    #on passe sur g 
-    w0eq= (4/9)*x
-    w1eq= (1/9)*x*(1+3*v1)
-    w2eq= (1/9)*x*(1+3*v2)
-    w3eq= (1/9)*x*(1-3*v1)
-    w4eq= (1/9)*x*(1-3*v2)
-    w5eq= (1/36)*x*(1+3*v1+3*v2)
-    w6eq= (1/36)*x*(1-3*v1+3*v2)
-    w7eq= (1/36)*x*(1-3*v1-3*v2)
-    w8eq= (1/36)*x*(1+3*v1-3*v2)
-    
-    # Collision
-    w0 = w0*(1-relaxation_time2) + relaxation_time2*w0eq
-    w1 = w1*(1-relaxation_time2) + relaxation_time2*w1eq
-    w2 = w2*(1-relaxation_time2) + relaxation_time2*w2eq
-    w3 = w3*(1-relaxation_time2) + relaxation_time2*w3eq
-    w4 = w4*(1-relaxation_time2) + relaxation_time2*w4eq
-    w5 = w5*(1-relaxation_time2) + relaxation_time2*w5eq
-    w6 = w6*(1-relaxation_time2) + relaxation_time2*w6eq
-    w7 = w7*(1-relaxation_time2) + relaxation_time2*w7eq
-    w8 = w8*(1-relaxation_time2) + relaxation_time2*w8eq
-    
-    # Streaming
-    w1[:,1:] = w1[:,:-1]
-    w2[:-1,:] = w2[1:,:]
-    w3[:,:-1] = w3[:,1:]
-    w4[1:,:] = w4[:-1,:]
-    w5[:-1,1:] = w5[1:,:-1]
-    w6[:-1,:-1] = w6[1:,1:]
-    w7[1:,:-1] = w7[:-1,1:]
-    w8[1:,1:] = w8[:-1,:-1]
-
-    
-    # Border conditions
-    # Left border
-    w1[:,0] = -w3[:,0]
-    w5[:,0] = -w7[:,0]
-    w8[:,0] = -w6[:,0]
-    w0[:,0]=0
-
-    # right border
-    w3[:,m] = -w1[:,m]
-    w6[:,m] = -w8[:,m]
-    w7[:,m] = -w5[:,m]
-    w0[:,m]=0
-
-    # top border
-    w4[0,:] = (U0/9) + (U0/9) - w2[0,:]
-    w7[0,:] = (U0/36) + (U0/36) - w5[0,:]
-    w8[0,:] = (U0/36) + (U0/36) - w6[0,:]
-    w0[0,:]=U0
+def stream(populations: FloatArray) -> FloatArray:
+    streamed = populations.copy()
+    for direction, (step_x, step_y) in enumerate(LATTICE_VELOCITIES):
+        target_rows, source_rows = shifted_slices(-step_y)
+        target_columns, source_columns = shifted_slices(step_x)
+        streamed[direction, target_rows, target_columns] = populations[direction, source_rows, source_columns]
+    return streamed
 
 
-    # Left border
-    w1[-1,:] = w1[-2,:]
-    w2[-1,:] = w2[-2,:]
-    w3[-1,:] = w3[-2,:]
-    w4[-1,:] = w4[-2,:]
-    w5[-1,:] = w5[-2,:]
-    w6[-1,:] = w6[-2,:]
-    w7[-1,:] = w7[-2,:]
-    w8[-1,:] = w8[-2,:]
-    w0[-1,:] = w0[-2,:]
-
-    x=w1+w2+w3+w4+w5+w6+w7+w8+w0
-    
+def apply_flow_walls(populations: FloatArray, lid_velocity: float) -> None:
+    populations[MOVING_EAST, :, 0] = populations[OPPOSITE[MOVING_EAST], :, 0]
+    populations[MOVING_WEST, :, -1] = populations[OPPOSITE[MOVING_WEST], :, -1]
+    populations[MOVING_UP, -1, :] = populations[OPPOSITE[MOVING_UP], -1, :]
+    lid = populations[:, 0, :]
+    lid_density = lid[MOVING_ALONG_LID].sum(axis=0) + 2 * lid[MOVING_UP].sum(axis=0)
+    lid_push = 6 * (WEIGHTS * VELOCITY_X)[MOVING_DOWN, None] * lid_velocity * lid_density
+    lid[MOVING_DOWN] = lid[OPPOSITE[MOVING_DOWN]] + lid_push
 
 
-# Plot
-fig = plt.figure(figsize=(12,4))
-plt.imshow(x, cmap="plasma")
-plt.colorbar()
-plt.legend()
-plt.show()
+def set_wall_temperature(wall: FloatArray, incoming: IndexArray, temperature: float) -> None:
+    wall[incoming] = 2 * WEIGHTS[incoming, None] * temperature - wall[OPPOSITE[incoming]]
+    wall[REST] = temperature
+
+
+def apply_heat_walls(populations: FloatArray, lid_temperature: float, side_wall_temperature: float) -> None:
+    set_wall_temperature(populations[:, :, 0], MOVING_EAST, side_wall_temperature)
+    set_wall_temperature(populations[:, :, -1], MOVING_WEST, side_wall_temperature)
+    set_wall_temperature(populations[:, 0, :], MOVING_DOWN, lid_temperature)
+    populations[:, -1, :] = populations[:, -2, :]
+
+
+def status_line(step: int, density: FloatArray, initial_mass: float, latest: Snapshot, previous: Snapshot) -> str:
+    return (
+        f"step {step:6d}  density {density.min():.4f} to {density.max():.4f}  "
+        f"mass change {density.sum() / initial_mass - 1:+.3%}  max speed {latest.speed.max():.4f}  "
+        f"temperature {latest.temperature.min():.4f} to {latest.temperature.max():.4f}  "
+        f"largest speed change since the last frame {np.abs(latest.speed - previous.speed).max():.1e}"
+    )
+
+
+def simulate(parameters: Parameters) -> list[Snapshot]:
+    size = parameters.cavity_size + 1
+    density = np.full((size, size), parameters.initial_density, dtype=np.float64)
+    velocity_x = np.zeros((size, size), dtype=np.float64)
+    velocity_y = np.zeros((size, size), dtype=np.float64)
+    velocity_x[0, :] = parameters.lid_velocity
+    temperature = np.zeros((size, size), dtype=np.float64)
+    flow = WEIGHTS[:, None, None] * density
+    heat = WEIGHTS[:, None, None] * temperature
+    initial_mass = float(density.sum())
+    snapshots = [Snapshot(0, np.hypot(velocity_x, velocity_y), temperature.copy())]
+
+    for step in range(1, parameters.steps + 1):
+        flow_rate = parameters.flow_relaxation_rate
+        flow = (1 - flow_rate) * flow + flow_rate * flow_equilibrium(density, velocity_x, velocity_y)
+        flow = stream(flow)
+        apply_flow_walls(flow, parameters.lid_velocity)
+        density = flow.sum(axis=0)
+        velocity_x = (VELOCITY_X[:, None, None] * flow).sum(axis=0) / density
+        velocity_y = (VELOCITY_Y[:, None, None] * flow).sum(axis=0) / density
+
+        heat_rate = parameters.heat_relaxation_rate
+        heat = (1 - heat_rate) * heat + heat_rate * heat_equilibrium(temperature, velocity_x, velocity_y)
+        heat = stream(heat)
+        apply_heat_walls(heat, parameters.lid_temperature, parameters.side_wall_temperature)
+        temperature = heat.sum(axis=0)
+
+        if step % parameters.snapshot_interval == 0:
+            if not (np.isfinite(density).all() and np.isfinite(temperature).all()):
+                raise FloatingPointError(f"the simulation diverged before step {step}")
+            snapshots.append(Snapshot(step, np.hypot(velocity_x, velocity_y), temperature.copy()))
+            if step % (10 * parameters.snapshot_interval) == 0:
+                print(status_line(step, density, initial_mass, snapshots[-1], snapshots[-2]))
+
+    return snapshots
+
+
+def render(snapshots: list[Snapshot], parameters: Parameters, path: Path) -> None:
+    figure = Figure(figsize=(8, 3.9), layout="constrained")
+    speed_axis = figure.add_subplot(1, 2, 1)
+    temperature_axis = figure.add_subplot(1, 2, 2)
+    speed_image = speed_axis.imshow(snapshots[0].speed / parameters.lid_velocity, cmap="Blues", vmin=0, vmax=1)
+    temperature_image = temperature_axis.imshow(
+        snapshots[0].temperature,
+        cmap="inferno",
+        vmin=parameters.side_wall_temperature,
+        vmax=parameters.lid_temperature,
+    )
+    figure.colorbar(speed_image, ax=speed_axis, label="speed / lid speed")
+    figure.colorbar(temperature_image, ax=temperature_axis, label="temperature")
+    speed_axis.set_title("Flow speed")
+    temperature_axis.set_title("Temperature")
+    for axis in (speed_axis, temperature_axis):
+        axis.set_xticks([])
+        axis.set_yticks([])
+    title = figure.suptitle("")
+
+    writer = PillowWriter(fps=10)
+    with writer.saving(figure, str(path), dpi=80):
+        for snapshot in snapshots:
+            speed_image.set_data(snapshot.speed / parameters.lid_velocity)
+            temperature_image.set_data(snapshot.temperature)
+            title.set_text(f"Heated lid-driven cavity, Re {parameters.reynolds_number:.0f}, step {snapshot.step}")
+            writer.grab_frame()
+
+
+def main() -> None:
+    parameters = Parameters()
+    size = parameters.cavity_size + 1
+    print(
+        f"Re {parameters.reynolds_number:.0f}, Pr {parameters.prandtl_number}, Pe {parameters.peclet_number:.0f}, "
+        f"grid {size}x{size}, {parameters.steps} steps"
+    )
+    snapshots = simulate(parameters)
+    output = Path("cavity.gif")
+    render(snapshots, parameters, output)
+    print(f"wrote {output}: {len(snapshots)} frames, {output.stat().st_size / 1e6:.2f} MB")
+
+
+if __name__ == "__main__":
+    main()
