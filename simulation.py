@@ -4,6 +4,7 @@ from typing import Final
 
 import numpy as np
 import numpy.typing as npt
+from matplotlib import colormaps
 from matplotlib.animation import PillowWriter
 from matplotlib.figure import Figure
 
@@ -21,6 +22,7 @@ MOVING_WEST: Final = np.flatnonzero(VELOCITY_X < 0)
 MOVING_UP: Final = np.flatnonzero(VELOCITY_Y > 0)
 MOVING_DOWN: Final = np.flatnonzero(VELOCITY_Y < 0)
 MOVING_ALONG_LID: Final = np.flatnonzero(VELOCITY_Y == 0)
+COLOR_LEVELS: Final = 32
 
 
 @dataclass(frozen=True)
@@ -166,10 +168,15 @@ def render(snapshots: list[Snapshot], parameters: Parameters, path: Path) -> Non
     figure = Figure(figsize=(8, 3.9), layout="constrained")
     speed_axis = figure.add_subplot(1, 2, 1)
     temperature_axis = figure.add_subplot(1, 2, 2)
-    speed_image = speed_axis.imshow(snapshots[0].speed / parameters.lid_velocity, cmap="Blues", vmin=0, vmax=1)
+    speed_image = speed_axis.imshow(
+        snapshots[0].speed / parameters.lid_velocity,
+        cmap=colormaps["Blues"].resampled(COLOR_LEVELS),
+        vmin=0,
+        vmax=1,
+    )
     temperature_image = temperature_axis.imshow(
         snapshots[0].temperature,
-        cmap="inferno",
+        cmap=colormaps["inferno"].resampled(COLOR_LEVELS),
         vmin=parameters.side_wall_temperature,
         vmax=parameters.lid_temperature,
     )
